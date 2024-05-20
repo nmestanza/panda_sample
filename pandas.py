@@ -7,8 +7,8 @@ output_file = 'msn_output.xlsx'
 # Specify the sheet names you want to filter
 sheets_to_filter = ['Sheet1', 'Sheet3', 'Sheet5']  # replace with your sheet names
 
-# Create a dictionary to hold the filtered data for each sheet
-filtered_data = {sheet: [] for sheet in sheets_to_filter}
+# Create a list to hold the filtered data from all sheets
+all_filtered_data = []
 
 # Open the workbook for reading
 workbook = pd.ExcelFile(input_file)
@@ -26,22 +26,17 @@ for sheet_name in workbook.sheet_names:
         # Apply the filter conditions with "greater than or equal to" condition
         filtered_df = df[(df.iloc[:, 1] >= 2) | (df.iloc[:, 2] == 0)]
 
-        # Append the filtered data to the dictionary
-        filtered_data[sheet_name].append(filtered_df)
+        # Append the filtered data to the list
+        all_filtered_data.append(filtered_df)
+
+# Concatenate all filtered data frames into one
+concatenated_filtered_data = pd.concat(all_filtered_data, ignore_index=True)
 
 # Open the workbook for writing
 with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-    # Iterate over each sheet in the original workbook
-    for sheet_name in workbook.sheet_names:
-        # Read the original data from the current sheet
-        df = pd.read_excel(input_file, sheet_name=sheet_name)
+    # Write the concatenated filtered data to a new sheet
+    concatenated_filtered_data.to_excel(writer, sheet_name='FilteredData', index=False)
 
-        if sheet_name in sheets_to_filter:
-            # Concatenate the filtered data frames
-            concatenated_filtered_df = pd.concat(filtered_data[sheet_name], ignore_index=True)
-
-            # Concatenate the original and filtered data
-            df = pd.concat([df, concatenated_filtered_df], ignore_index=True)
-
-        # Write the data to the new workbook
-        df.to_excel(writer, sheet_name=sheet_name, index=False)
+# Optional: print the concatenated filtered data to the console
+print("Concatenated filtered data:")
+print(concatenated_filtered_data)
