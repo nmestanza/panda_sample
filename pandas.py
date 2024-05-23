@@ -1,42 +1,64 @@
-import pandas as pd
+import paramiko
+import getpass
+import openpyxl
 
-# Load your spreadsheet
-input_file = 'your_spreadsheet.xlsx'
-output_file = 'msn_output.xlsx'
+def get_ap_count(hostname, username, password):
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(hostname, username=username, password=password)
 
-# Specify the sheet names you want to filter
-sheets_to_filter = ['Sheet1', 'Sheet3', 'Sheet5']  # replace with your sheet names
+        stdin, stdout, stderr = ssh.exec_command('show ap summary')
+        output = stdout.read().decode()
+        
+        ssh.close()
+        
+        # Process the output to find the number of APs
+        lines = output.splitlines()
+        ap_count = 0
+        for line in lines:
+            if 'Number of APs' in line:
+                ap_count = int(line.split()[-1])
+                break
+        
+        return ap_count
 
-# Create a list to hold the filtered data from all sheets
-all_filtered_data = []
+    except Exception as e:
+        print(f"Failed to connect to {hostname}: {e}")
+        return None
 
-# Open the workbook for reading
-workbook = pd.ExcelFile(input_file)
+def main():
+    # Ask for credentials
+    username = input("Enter your SSH username: ")
+    password = getpass.getpass("Enter your SSH password: ")
+    
+    # Read hostnames from the input file
+    with open('hostnames.txt', 'r') as file:
+        hostnames = [line.strip() for line in file.readlines()]
+    
+    # Create a new Excel workbook and select the active worksheet
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = 'AP Counts'
+    
+    # Write headers
+    sheet['A1'] = 'Hostname'
+    sheet['B1'] = 'AP Count'
+    
+    # Collect AP counts for each hostname
+    for row, hostname in enumerate(hostnames, start=2):
+        print(f"Connecting to {hostname}...")
+        ap_count = get_ap_count(hostname, username, password)
+        if ap_count is not None:
+            sheet[f'A{row}'] = hostname
+            sheet[f'B{row}'] = ap_count
+        else:
+            sheet[f'A{row}'] = hostname
+            sheet[f'B{row}'] = 'Error'
+    
+    # Save the workbook to a file
+    workbook.save('ap_counts.xlsx')
+    print("AP counts have been saved to 'ap_counts.xlsx'")
 
-# Iterate over each sheet in the input workbook
-for sheet_name in workbook.sheet_names:
-    # Read the data from the current sheet
-    df = pd.read_excel(input_file, sheet_name=sheet_name)
-
-    if sheet_name in sheets_to_filter:
-        # Ensure the relevant columns are converted to integers for comparison
-        df.iloc[:, 1] = pd.to_numeric(df.iloc[:, 1], errors='coerce').fillna(0).astype(int)
-        df.iloc[:, 2] = pd.to_numeric(df.iloc[:, 2], errors='coerce').fillna(0).astype(int)
-
-        # Apply the filter conditions with "greater than or equal to" condition
-        filtered_df = df[(df.iloc[:, 1] >= 2) | (df.iloc[:, 2] == 0)]
-
-        # Append the filtered data to the list
-        all_filtered_data.append(filtered_df)
-
-# Concatenate all filtered data frames into one
-concatenated_filtered_data = pd.concat(all_filtered_data, ignore_index=True)
-
-# Open the workbook for writing
-with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-    # Write the concatenated filtered data to a new sheet
-    concatenated_filtered_data.to_excel(writer, sheet_name='FilteredData', index=False)
-
-# Optional: print the concatenated filtered data to the console
-print("Concatenated filtered data:")
-print(concatenated_filtered_data)
+if __name__ == "__main__":
+    main()
